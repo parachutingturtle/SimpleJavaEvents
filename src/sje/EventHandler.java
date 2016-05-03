@@ -1,3 +1,19 @@
+/* 
+ * Copyright (C) 2016 parachutingturtle
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 package sje;
 
 import java.util.Collections;
@@ -5,13 +21,14 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * T típusú eseményargumentummal rendelkező {@link Event Esemény}ek kezelésére szolgáló osztály.
- * Érdemes a megfigyelő osztályban belső osztályként leszármaztatni belőle.
- * A {@link EventHandler#handleEvent(java.lang.Object, java.lang.Object)} metódus felüldefiniálásával lehet az
- * eseményeket kezelni.
- * <p/>
- * @see Events.Event
- * @author Megyesi Attila
+ * Handler class for {@link Event Event}s with event arguments of type T.
+ * <p>
+ * It is recommended to extend this class with an event-specific handler as a nested class within the class that serves as the "observer".
+ * Handle events by overriding the {@link EventHandler#handleEvent(java.lang.Object, java.lang.Object) } method.
+ * </p>
+ * 
+ * @param <T> The type of the event arguments used for the event to handle.
+ * @see Event
  */
 public abstract class EventHandler<T> {
     private final List<EventDischarge<T>> _queue = Collections.synchronizedList(new LinkedList<EventDischarge<T>>());
@@ -20,20 +37,16 @@ public abstract class EventHandler<T> {
     private EventDischarge<T> _evt = null;
 
     /**
-     * Leállítja az eseménykezelő szálat.
-     * <p/>
-     * @see {@link EventHandlingRunnable#stop() }
+     * Stops the event handler thread that is used for asynchronous event forwarding.
      */
     public static void stopHandlerThread() {
         _dispatcher.stop();
     }
 
     /**
-     * Hozzáadja az eseményt a várakozósorba. Az esemény az eseménykezelő szálon lesz kezelve, a legközelebbi
-     * adandó alkalommal.
-     * <p/>
-     * @param sender Az eseményt kiváltó objektum
-     * @param args Az eseményhez tartozó adatok
+     * Adds a fired event to the queue of events to dispatch asynchronously. The event will be handled on the event dispatcher thread as soon as possible.
+     * @param sender The object firing the event
+     * @param args The arguments for the event
      */
     public final void addToQueue(Object sender, T args) {
         if (!_isRegistered) {
@@ -45,28 +58,26 @@ public abstract class EventHandler<T> {
     }
 
     /**
-     * Az eseménykezelő szálról kerül meghívásra, továbbítja az összes felgyülemlett eseményt
-     * a {@link EventHandler#handleEvent(java.lang.Object, java.lang.Object) handleEvent} metódus meghívásával.
+     * Called from the event dispatcher thread, forwards all unhandled events via their {@link EventHandler#handleEvent(java.lang.Object, java.lang.Object)  handleEvent} methods.
      */
     protected void forwardEvents() {
         while (!_queue.isEmpty()) {
             _evt = _queue.get(0);
-            _queue.remove(0/* _evt */);
-            //a get és a remove között ugyan bekövetkezhet egy másik szálon add, de az a nulladik indexet
-            //nem módosíthatja.
-            //Ez azért szálbiztonságos, mert csak a nulladik elemen dolgozik, és remove csak ezen a szálon van,
-            //illetve mert a _queue egy Collections.synchronizedList, amely garantálja az egyedi listaműveletek
-            //atomi végrehajtását, tehát csak az iterációét nem, az pedig itt nem történik.
+            _queue.remove(0);
+            //Even though it is possible that the collection will be modified on another thread between these get and remove calls,
+            //such modification can only be an addition, therefore the first element will not be accessed.
+            //This is thread safe because we only operate on the first element here, and removing from the collection only happens on this thread.
+            //Furthermore, the _queue is a Collections.synchronizedList, which guarantees the atomic execution of individual collection operations,
+            //everything other than iteration, and we don't perform iteration here.
             handleEvent(_evt.getSender(), _evt.getParameter());
             _evt = null;
         }
     }
 
     /**
-     * Felüldefiniálandó a T típusú eseményargumentummal rendelkező események kezelésére.
-     * <p/>
-     * @param sender Az eseményt kiváltó objektum
-     * @param e Az eseményargumentum (az esemény bekövetkezéséhez tartozó információt tartalmazó objektum), T típusú.
+     * Override this method to handle events with event arguments of type T.
+     * @param sender The object firing the event
+     * @param e The arguments for the event
      */
     protected abstract void handleEvent(Object sender, T e);
 }
